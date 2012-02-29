@@ -15,17 +15,18 @@
 package twittergo
 
 import (
-	"http"
-	"strings"
-	"fmt"
-	"sort"
-	"time"
-	"crypto/sha1"
-	"crypto/hmac"
-	"os"
-	"encoding/base64"
-	"io/ioutil"
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"sort"
+	"strings"
+	"time"
 )
 
 // Container for client-specific configuration related to the OAuth process.
@@ -56,7 +57,7 @@ type OAuthUserConfig struct {
 	AccessTokenSecret  string
 	AccessTokenKey     string
 	Verifier           string
-	AccessValues       http.Values
+	AccessValues       url.Values
 }
 
 // Returns a token and secret corresponding to where in the OAuth flow this
@@ -82,29 +83,34 @@ type OAuthService struct {
 }
 
 // Sign and send a Request using the current configuration.
-func (o *OAuthService) Send(request *Request, user *OAuthUserConfig, client *http.Client) (*http.Response, os.Error) {
+func (o *OAuthService) Send(request *Request, user *OAuthUserConfig, client *http.Client) (*http.Response, error) {
 	o.Signer.Sign(request, o.Config, user)
 	httpRequest, err := request.GetHttpRequest()
 	if err != nil {
 		return nil, err
 	}
+fmt.Println(httpRequest)
 	response, err := client.Do(httpRequest)
 	if err != nil {
 		return nil, err
 	}
 	if response.StatusCode != 200 {
-		return nil, os.NewError("Endpoint response: " + response.Status)
+fmt.Println(response)
+var buf [1024]uint8
+s, _ := response.Body.Read(buf[:])
+fmt.Println(s,string(buf[0:s]))
+		return nil, errors.New("Endpoint response: " + response.Status)
 	}
 	return response, nil
 }
 
 // Issue a request to exchange the current request token for an access token.
-func (o *OAuthService) GetAccessToken(token string, verifier string, user *OAuthUserConfig, client *http.Client) os.Error {
+func (o *OAuthService) GetAccessToken(token string, verifier string, user *OAuthUserConfig, client *http.Client) error {
 	if user.RequestTokenKey == "" || user.RequestTokenSecret == "" {
-		return os.NewError("No configured request token")
+		return errors.New("No configured request token")
 	}
 	if user.RequestTokenKey != token {
-		return os.NewError("Returned token did not match request token")
+		return errors.New("Returned token did not match request token")
 	}
 	user.Verifier = verifier
 	params := map[string]string{
@@ -122,17 +128,17 @@ func (o *OAuthService) GetAccessToken(token string, verifier string, user *OAuth
 // Given the returned response from the access token request, pull out the
 // access token and token secret.  Store a copy of any other values returned,
 // too, since Twitter returns handy information such as the username.
-func (o *OAuthService) parseAccessToken(response *http.Response, user *OAuthUserConfig) os.Error {
+func (o *OAuthService) parseAccessToken(response *http.Response, user *OAuthUserConfig) error {
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return err
 	}
-	params, err := http.ParseQuery(string(body))
+	params, err := url.ParseQuery(string(body))
 	tokenKey := params.Get("oauth_token")
 	tokenSecret := params.Get("oauth_token_secret")
 	if tokenKey == "" || tokenSecret == "" {
-		return os.NewError("No token or secret found")
+		return errors.New("No token or secret found")
 	}
 	user.AccessTokenKey = tokenKey
 	user.AccessTokenSecret = tokenSecret
@@ -142,16 +148,16 @@ func (o *OAuthService) parseAccessToken(response *http.Response, user *OAuthUser
 
 // Obtain a URL which will allow the current user to authorize access to their
 // OAuth-protected data.
-func (o *OAuthService) GetAuthorizeUrl(user *OAuthUserConfig) (string, os.Error) {
+func (o *OAuthService) GetAuthorizeUrl(user *OAuthUserConfig) (string, error) {
 	if user.RequestTokenKey == "" || user.RequestTokenSecret == "" {
-		return "", os.NewError("No configured request token")
+		return "", errors.New("No configured request token")
 	}
-	token := http.URLEscape(user.RequestTokenKey)
+	token := url.QueryEscape(user.RequestTokenKey)
 	return o.AuthorizeUrl + "?oauth_token=" + token, nil
 }
 
 // Issue a request to obtain a Request token.
-func (o *OAuthService) GetRequestToken(user *OAuthUserConfig, client *http.Client) os.Error {
+func (o *OAuthService) GetRequestToken(user *OAuthUserConfig, client *http.Client) error {
 	params := map[string]string{
 		"oauth_callback": o.Config.Callback,
 	}
@@ -166,22 +172,22 @@ func (o *OAuthService) GetRequestToken(user *OAuthUserConfig, client *http.Clien
 
 // Given the returned response from a Request token request, parse out the
 // appropriate request token and secret fields.
-func (o *OAuthService) parseRequestToken(response *http.Response, user *OAuthUserConfig) os.Error {
+func (o *OAuthService) parseRequestToken(response *http.Response, user *OAuthUserConfig) error {
 	defer response.Body.Close()
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return err
 	}
-	params, err := http.ParseQuery(string(body))
+	params, err := url.ParseQuery(string(body))
 	tokenKey := params.Get("oauth_token")
 	tokenSecret := params.Get("oauth_token_secret")
 	if tokenKey == "" || tokenSecret == "" {
-		return os.NewError("No token or secret found")
+		return errors.New("No token or secret found")
 	}
 	user.RequestTokenKey = tokenKey
 	user.RequestTokenSecret = tokenSecret
 	if params.Get("oauth_callback_confirmed") == "false" {
-		return os.NewError("OAuth callback not confirmed")
+		return errors.New("OAuth callback not confirmed")
 	}
 	return nil
 }
@@ -201,7 +207,7 @@ func (s *HmacSha1Signer) Sign(request *Request, config *OAuthConfig, user *OAuth
 		"oauth_consumer_key":     config.ConsumerKey,
 		"oauth_nonce":            s.generateNonce(),
 		"oauth_signature_method": "HMAC-SHA1",
-		"oauth_timestamp":        fmt.Sprintf("%v", time.Seconds()),
+		"oauth_timestamp":        fmt.Sprintf("%v", time.Now()),
 		"oauth_version":          "1.0",
 	}
 	tokenKey, tokenSecret := user.GetToken()
@@ -217,13 +223,13 @@ func (s *HmacSha1Signer) Sign(request *Request, config *OAuthConfig, user *OAuth
 	}
 	signatureParts := []string{
 		request.Method,
-		http.URLEscape(request.Url),
+		url.QueryEscape(request.Url),
 		s.encodeParameters(signingParams)}
 	signatureBase := strings.Join(signatureParts, "&")
 	signingKey := config.ConsumerSecret + "&" + tokenSecret
-	signer := hmac.NewSHA1([]byte(signingKey))
+	signer := hmac.New(sha1.New, []byte(signingKey))
 	signer.Write([]byte(signatureBase))
-	oauthSignature := base64.StdEncoding.EncodeToString(signer.Sum())
+	oauthSignature := base64.StdEncoding.EncodeToString(signer.Sum(nil))
 	oauthParams["oauth_signature"] = oauthSignature
 	headerParts := make([]string, len(oauthParams))
 	var i = 0
@@ -252,18 +258,18 @@ func (HmacSha1Signer) encodeParameters(params map[string]string) string {
 		encoded := Rfc3986Escape(key) + "=" + Rfc3986Escape(value)
 		encodedParts[i] = encoded
 	}
-	return http.URLEscape(strings.Join(encodedParts, "&"))
+	return url.QueryEscape(strings.Join(encodedParts, "&"))
 }
 
 // Generate a unique nonce value.  Should not be called more than once per
 // nanosecond
 // TODO: Come up with a better generation method.
 func (HmacSha1Signer) generateNonce() string {
-	ns := time.Nanoseconds()
+	ns := time.Now().UnixNano()
 	token := "OAuth Client Lib" + string(ns)
 	h := sha1.New()
 	h.Write([]byte(token))
-	return fmt.Sprintf("%x", h.Sum())
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // Characters which should not be escaped according to RFC 3986.

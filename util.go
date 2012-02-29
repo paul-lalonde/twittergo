@@ -17,7 +17,6 @@ package twittergo
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 // Wraps an existing ReadCloser and logs all output passed through it
@@ -32,13 +31,13 @@ func NewLoggingReader(reader io.ReadCloser) *LoggingReader {
 }
 
 // Read the requested bytes from the wrapped ReadCloser, logging them to stdout.
-func (lr *LoggingReader) Read(p []byte) (int, os.Error) {
+func (lr *LoggingReader) Read(p []byte) (int, error) {
 	n, err := lr.reader.Read(p)
 	fmt.Println(string(p))
 	return n, err
 }
 
 // Closes the wrapped ReadCloser.
-func (lr *LoggingReader) Close() os.Error {
+func (lr *LoggingReader) Close() error {
 	return lr.reader.Close()
 }

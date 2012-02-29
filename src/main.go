@@ -15,17 +15,17 @@
 package main
 
 import (
-	"twittergo"
+	"bufio"
+	"bytes"
+	"encoding/gob"
 	"fmt"
-	"reflect"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
-	"gob"
-	"bufio"
+	"reflect"
 	"strings"
-	"exec"
-	"bytes"
+	"github.com/paul-lalonde/twittergo"
 )
 
 // Pretty-prints a value to the terminal.
@@ -215,7 +215,7 @@ func GetExecutableDirectory() string {
 
 // Saves a serialized version of an interface to the specified path.
 // Sets the file mask to 600.
-func SaveConfig(path string, config interface{}) os.Error {
+func SaveConfig(path string, config interface{}) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func SaveConfig(path string, config interface{}) os.Error {
 }
 
 // Loads a serialized version of an interface from the specified path.
-func LoadConfig(path string, out interface{}) os.Error {
+func LoadConfig(path string, out interface{}) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -242,7 +242,7 @@ func LoadConfig(path string, out interface{}) os.Error {
 
 // Obtains an OAuthConfig.
 // Loads an existing client configuration, or prompts the user if none is found.
-func GetClientConfig() (*twittergo.OAuthConfig, os.Error) {
+func GetClientConfig() (*twittergo.OAuthConfig, error) {
 	configPath := path.Join(GetExecutableDirectory(), "client.config")
 	var config twittergo.OAuthConfig
 	if err := LoadConfig(configPath, &config); err != nil {
@@ -261,7 +261,7 @@ func GetClientConfig() (*twittergo.OAuthConfig, os.Error) {
 
 // Obtains an OAuthUserConfig.
 // Prompts the user to load a specified config, or starts a new OAuth flow.
-func GetUserConfig(config *twittergo.OAuthConfig) (*twittergo.OAuthUserConfig, os.Error) {
+func GetUserConfig(config *twittergo.OAuthConfig) (*twittergo.OAuthUserConfig, error) {
 	dirPath := GetExecutableDirectory()
 	globPath := dirPath + "*.twitter"
 	matches, _ := filepath.Glob(globPath)
@@ -369,7 +369,7 @@ func main() {
 
 	var (
 		exit         bool = false
-		err          os.Error
+		err          error
 		arrayOutput  interface{}
 		structOutput interface{}
 		client       *twittergo.Client

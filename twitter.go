@@ -16,10 +16,10 @@
 package twittergo
 
 import (
-	"json"
-	"http"
-	"os"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 )
@@ -234,7 +234,7 @@ func (c *Client) SetUser(user *OAuthUserConfig) {
 
 // Sends a HTTP request through this instance's HTTP client.  If auth is
 // requested, then the request is signed with the configured OAuth parameters.
-func (c *Client) sendRequest(request *Request, auth bool) (*http.Response, os.Error) {
+func (c *Client) sendRequest(request *Request, auth bool) (*http.Response, error) {
 	if auth {
 		return c.OAuth.Send(request, c.User, c.HttpClient)
 	}
@@ -246,13 +246,13 @@ func (c *Client) sendRequest(request *Request, auth bool) (*http.Response, os.Er
 	if response.StatusCode != 200 {
 		fmt.Println(httpRequest)
 		fmt.Println(response)
-		return nil, os.NewError("Endpoint response: " + response.Status)
+		return nil, errors.New("Endpoint response: " + response.Status)
 	}
 	return response, nil
 }
 
 // Parses a JSON encoded HTTP response into the supplied interface.
-func (c *Client) parseJson(response *http.Response, out interface{}) os.Error {
+func (c *Client) parseJson(response *http.Response, out interface{}) error {
 	defer response.Body.Close()
 	if err := json.NewDecoder(response.Body).Decode(out); err != nil {
 		return err
@@ -263,7 +263,7 @@ func (c *Client) parseJson(response *http.Response, out interface{}) os.Error {
 // Makes a request for a specific path in the API, using supplied params and
 // method, and signing the request if needed.  The result is decoded into
 // the supplied interface.
-func (c *Client) getJson(method string, path string, params *Parameters, auth bool, out interface{}) os.Error {
+func (c *Client) getJson(method string, path string, params *Parameters, auth bool, out interface{}) error {
 	var paramsMap map[string]string = nil
 	if params != nil {
 		paramsMap = params.Map()
@@ -280,24 +280,24 @@ func (c *Client) getJson(method string, path string, params *Parameters, auth bo
 }
 
 // Makes a request for a path which contains a feed of status updates.
-func (c *Client) getStatuses(path string, params *Parameters, auth bool) ([]Status, os.Error) {
+func (c *Client) getStatuses(path string, params *Parameters, auth bool) ([]Status, error) {
 	var statuses []Status
 	err := c.getJson("GET", path, params, auth, &statuses)
 	return statuses, err
 }
 
 // Issues a request for an OAuth Request Token.
-func (c *Client) GetRequestToken() os.Error {
+func (c *Client) GetRequestToken() error {
 	return c.OAuth.GetRequestToken(c.User, c.HttpClient)
 }
 
 // Returns an URL which the authorizing user should visit to grant access.
-func (c *Client) GetAuthorizeUrl() (string, os.Error) {
+func (c *Client) GetAuthorizeUrl() (string, error) {
 	return c.OAuth.GetAuthorizeUrl(c.User)
 }
 
 // Issues a request for an OAuth Access Token.
-func (c *Client) GetAccessToken(token string, verifier string) os.Error {
+func (c *Client) GetAccessToken(token string, verifier string) error {
 	return c.OAuth.GetAccessToken(token, verifier, c.User, c.HttpClient)
 }
 
@@ -306,53 +306,53 @@ func (c *Client) GetAccessToken(token string, verifier string) os.Error {
  */
 
 // Returns the authenticated user's home timeline.
-func (c *Client) GetHomeTimeline(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetHomeTimeline(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweeted_by_me", params, true)
 }
 
 // Returns the mentions of the current user.
-func (c *Client) GetMentions(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetMentions(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/mentions", params, true)
 }
 
 // Returns the global public timeline.
-func (c *Client) GetPublicTimeline(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetPublicTimeline(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/public_timeline", params, false)
 }
 
 // Returns retweets by the currently authenticated user.
-func (c *Client) GetRetweetedByMe(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetRetweetedByMe(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweeted_by_me", params, true)
 }
 
 // Returns retweets to the currently authenticated user.
-func (c *Client) GetRetweetedToMe(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetRetweetedToMe(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweeted_to_me", params, true)
 }
 
 // Returns retweets of the currently authenticated user's tweets.
-func (c *Client) GetRetweetsOfMe(params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetRetweetsOfMe(params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweets_of_me", params, true)
 }
 
 // Returns the timeline for a user, defaults to the current authenticated user.
-func (c *Client) GetUserTimeline(auth bool, params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetUserTimeline(auth bool, params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/user_timeline", params, auth)
 }
 
 // Returns the retweets to the specified user.
-func (c *Client) GetRetweetedToUser(auth bool, params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetRetweetedToUser(auth bool, params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweeted_to_user", params, auth)
 }
 
 // Returns the retweets from the specified user.
-func (c *Client) GetRetweetedByUser(id string, auth bool, params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetRetweetedByUser(id string, auth bool, params *Parameters) ([]Status, error) {
 	params = params.Set("id", id)
 	return c.getStatuses("statuses/retweeted_by_user", params, auth)
 }
 
 // Returns the users who have retweeted the specified status.
-func (c *Client) GetStatusRetweetedBy(id string, auth bool, params *Parameters) ([]User, os.Error) {
+func (c *Client) GetStatusRetweetedBy(id string, auth bool, params *Parameters) ([]User, error) {
 	var users []User
 	err := c.getJson("GET", "statuses/"+id+"/retweeted_by", params, auth, &users)
 	return users, err
@@ -360,7 +360,7 @@ func (c *Client) GetStatusRetweetedBy(id string, auth bool, params *Parameters) 
 
 // Returns the IDs of users who have retweeted the specified status.
 // Numerical IDs are not supported - just convert the string array.
-func (c *Client) GetStatusRetweetedByIds(id string, params *Parameters) ([]string, os.Error) {
+func (c *Client) GetStatusRetweetedByIds(id string, params *Parameters) ([]string, error) {
 	var ids []string
 	params = params.Set("stringify_ids", "true")
 	err := c.getJson("GET", "statuses/"+id+"/retweeted_by/ids", params, true, &ids)
@@ -368,18 +368,18 @@ func (c *Client) GetStatusRetweetedByIds(id string, params *Parameters) ([]strin
 }
 
 // Get the retweets of a given status.
-func (c *Client) GetStatusRetweets(id string, params *Parameters) ([]Status, os.Error) {
+func (c *Client) GetStatusRetweets(id string, params *Parameters) ([]Status, error) {
 	return c.getStatuses("statuses/retweets/"+id, params, true)
 }
 
 // Gets a single status
-func (c *Client) GetStatus(id string, params *Parameters) (Status, os.Error) {
+func (c *Client) GetStatus(id string, params *Parameters) (Status, error) {
 	var status Status
 	err := c.getJson("GET", "statuses/show/"+id, params, false, &status)
 	return status, err
 }
 
-func (c *Client) Update(text string, params *Parameters) (Status, os.Error) {
+func (c *Client) Update(text string, params *Parameters) (Status, error) {
 	var status Status
 	params = params.Set("status", text)
 	err := c.getJson("POST", "statuses/update", params, true, &status)

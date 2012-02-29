@@ -15,10 +15,9 @@
 package twittergo
 
 import (
-	"http"
-	"os"
 	"bytes"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -46,7 +45,7 @@ func NewRequest(method string, url string, params map[string]string, headers map
 // to a http.Client.
 // The Parameters in the request object are automatically form URL-encoded
 // and added to the body if the request is anything other than a GET.
-func (r *Request) GetHttpRequest() (*http.Request, os.Error) {
+func (r *Request) GetHttpRequest() (*http.Request, error) {
 	url := r.Url
 	var body io.Reader
 	if len(r.Parameters) > 0 {
